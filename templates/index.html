@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Summarizer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<body>
+    <div class="background-glob"></div>
+    <main class="container">
+        
+        <div class="input-section">
+            <header class="app-header">
+                <h1>Text Summarizer</h1>
+                <p>Transform long text into concise summaries instantly.</p>
+            </header>
+
+            <form class="summary-form">
+                <div class="controls">
+                    <div class="control-group">
+                        <label for="max_length">Summary Length</label>
+                        <div class="select-wrapper">
+                            <select id="max_length" name="max_length">
+                                <option value="larger" {% if length_choice=='larger' %}selected{% endif %}>Detailed
+                                </option>
+                                <option value="medium" {% if length_choice=='medium' or not length_choice %}selected{%
+                                    endif %}>Balanced</option>
+                                <option value="smaller" {% if length_choice=='smaller' %}selected{% endif %}>Concise
+                                </option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="input-area">
+                    <textarea name="text" id="txtbox" placeholder="Paste your text here to summarize..."
+                        required>{{ original_text if original_text else '' }}</textarea>
+                </div>
+
+                <button type="submit" class="btn-primary">
+                    <span>Summarize Text</span>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M5 12H19M19 12L12 5M19 12L12 19" stroke="currentColor" stroke-width="2"
+                            stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                </button>
+            </form>
+        </div>
+
+        <div id="loader" class="result-area" style="display: none;">
+            <div class="skeleton-header">
+                <h2>Summarizing</h2>
+                <div class="typing-indicator">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </div>
+            </div>
+            <div class="skeleton-content">
+                <div class="skeleton-line" style="width: 100%"></div>
+                <div class="skeleton-line" style="width: 92%"></div>
+                <div class="skeleton-line" style="width: 96%"></div>
+                <div class="skeleton-line" style="width: 85%"></div>
+                <div class="skeleton-line" style="width: 90%"></div>
+            </div>
+        </div>
+
+        {% if summary %}
+        <div id="result" class="result-area fadeIn">
+            <h2>Summary Result</h2>
+            <div class="summary-content">
+                {{ summary }}
+            </div>
+        </div>
+        {% endif %}
+    </main>
+    <footer>
+        <div class="foot">
+            <h3>Developed by Nerd-SWAYAM</h3>
+        </div>
+    </footer>
+
+    <script>
+        document.querySelector('.summary-form').addEventListener('submit', async function (e) {
+            e.preventDefault();
+
+            const loader = document.getElementById('loader');
+            const resultArea = document.getElementById('result');
+            const btn = this.querySelector('button');
+            const formData = new FormData(this);
+
+            // Reset UI
+            loader.style.display = 'block';
+            loader.classList.add('fadeIn');
+
+            // Handle existing result area or clear it
+            let container = document.getElementById('result');
+            if (container) {
+                container.style.display = 'none'; // Hide initially
+                container.querySelector('.summary-content').textContent = '';   // Clear previous text
+                container.classList.remove('fadeIn');
+            }
+
+            // UI State: Loading
+            btn.disabled = true;
+            btn.style.opacity = '0.7';
+            btn.style.cursor = 'wait';
+
+            try {
+                const response = await fetch('/summarize', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error('Server Error:', errorText);
+                    throw new Error('Server returned ' + response.status);
+                }
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+
+                let firstChunk = true;
+
+                while (true) {
+                    const { done, value } = await reader.read();
+
+                    if (done) break;
+
+                    if (firstChunk) {
+                        loader.style.display = 'none';
+
+                        container = document.getElementById('result');
+                        if (!container) {
+                            // Create it dynamically if it doesn't exist
+                            container = document.createElement('div');
+                            container.id = 'result';
+                            container.className = 'result-area fadeIn';
+                            container.innerHTML = '<h2>Summary Result</h2><div class="summary-content"></div>';
+                            document.querySelector('.container').appendChild(container);
+                        } else {
+                            container.style.display = 'block';
+                            container.classList.add('fadeIn');
+                        }
+                        firstChunk = false;
+                    }
+
+                    const chunk = decoder.decode(value);
+                    container.querySelector('.summary-content').textContent += chunk;
+
+                    // Auto-scroll to bottom if needed (optional)
+                    // container.scrollTop = container.scrollHeight;
+                }
+
+            } catch (err) {
+                console.error('Error:', err);
+                alert('An error occurred while generating the summary.');
+            } finally {
+                loader.style.display = 'none';
+                btn.disabled = false;
+                btn.style.opacity = '1';
+                btn.style.cursor = 'pointer';
+            }
+        });
+    </script>
+</body>
+
+</html>
