@@ -60,6 +60,11 @@ A modern, web-based AI Text Summarization application that uses state-of-the-art
    ```
    http://127.0.0.1:5000
    ```
+### If incase the Hugging Face throws an error:
+1. Go to [HuggingFace.co](https://huggingface.co/settings/tokens)
+    (Create an account if not).
+2. Create an access token and paste it inside the terminal
+
 
 ## 📈 Readability Scoring
 
@@ -70,6 +75,9 @@ The application uses the **Flesch Reading Ease** formula:
 - **60-70**: Standard (8th-9th grade level)
 - **0-30**: Very Difficult (Professional/Academic)
 
+
+## Demo Screen Shot
+![demo](srcn.png)
 ---
 
 Developed with ❤️ by **Nerd-SWAYAM**
