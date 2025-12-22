@@ -77,7 +77,7 @@ The application uses the **Flesch Reading Ease** formula:
 
 
 ## Demo Screen Shot
-![demo](srcn.png)
+![demo](static/srcn.png)
 ---
 
 Developed with ❤️ by **Nerd-SWAYAM**
