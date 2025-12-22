@@ -1,0 +1,3 @@
+flask
+transformers
+huggingface_hub

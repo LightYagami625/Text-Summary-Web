@@ -14,7 +14,7 @@
 <body>
     <div class="background-glob"></div>
     <main class="container">
-        
+
         <div class="input-section">
             <header class="app-header">
                 <h1>Text Summarizer</h1>
@@ -41,6 +41,17 @@
                 <div class="input-area">
                     <textarea name="text" id="txtbox" placeholder="Paste your text here to summarize..."
                         required>{{ original_text if original_text else '' }}</textarea>
+
+                    <div class="stats-bar" id="input-stats">
+                        <div class="stat-item">
+                            <span>Words:</span>
+                            <span class="stat-value" id="input-words">0</span>
+                        </div>
+                        <div class="stat-item">
+                            <span>Readability:</span>
+                            <span class="stat-value" id="input-readability">N/A</span>
+                        </div>
+                    </div>
                 </div>
 
                 <button type="submit" class="btn-primary">
@@ -77,6 +88,24 @@
             <div class="summary-content">
                 {{ summary }}
             </div>
+            <div class="stats-bar" id="output-stats-container">
+                <div class="stat-item">
+                    <span>Words:</span>
+                    <span class="stat-value" id="output-words">0</span>
+                </div>
+                <div class="stat-item">
+                    <span>Readability:</span>
+                    <span class="stat-value" id="output-readability">N/A</span>
+                </div>
+                <script>
+                    // If server-side rendering is used (rare here since we just loaded page), update stats immediately for this block
+                    // Wait for DOM content loaded to be safe, or just run inline if script is below.
+                    // Actually, we can just rely on the main script's initial update call if we add a check there,
+                    // OR just inline a quick call here.
+                    // Since the main script is at the bottom, we can't call calculateMetrics yet.
+                    // I will leave this empty and let the user interact to update, OR I will add a DOMContentLoaded listener in the main script to handle pre-filled summary.
+                </script>
+            </div>
         </div>
         {% endif %}
     </main>
@@ -87,11 +116,67 @@
     </footer>
 
     <script>
+        // Metrics Calculation Helpers
+        function countSyllables(word) {
+            word = word.toLowerCase();
+            if (word.length <= 3) return 1;
+            word = word.replace(/(?:[^laeiouy]es|ed|[^laeiouy]e)$/, '');
+            word = word.replace(/^y/, '');
+            const matches = word.match(/[aeiouy]{1,2}/g);
+            return matches ? matches.length : 1;
+        }
+
+        function calculateMetrics(text) {
+            if (!text.trim()) return { words: 0, readability: 'N/A' };
+
+            const words = text.trim().split(/\s+/).filter(w => w.length > 0);
+            const wordCount = words.length;
+
+            // Sentence count (approximate by punctuation)
+            const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 0);
+            const sentenceCount = Math.max(1, sentences.length);
+
+            // Syllable count
+            let syllableCount = 0;
+            words.forEach(w => syllableCount += countSyllables(w));
+
+            // Flesch Reading Ease
+            // Formula: 206.835 - 1.015 * (total words / total sentences) - 84.6 * (total syllables / total words)
+            const score = 206.835 - 1.015 * (wordCount / sentenceCount) - 84.6 * (syllableCount / wordCount);
+
+            let readability = score.toFixed(1);
+            if (score >= 90) readability += " (Very Easy)";
+            else if (score >= 80) readability += " (Easy)";
+            else if (score >= 70) readability += " (Fairly Easy)";
+            else if (score >= 60) readability += " (Standard)";
+            else if (score >= 50) readability += " (Fairly Difficult)";
+            else if (score >= 30) readability += " (Difficult)";
+            else readability += " (Very Difficult)";
+
+            return { words: wordCount, readability };
+        }
+
+        function updateStats(text, wordsElemId, readabilityElemId) {
+            const metrics = calculateMetrics(text);
+            document.getElementById(wordsElemId).textContent = metrics.words;
+            document.getElementById(readabilityElemId).textContent = metrics.readability;
+        }
+
+        // Live input stats
+        const inputBox = document.getElementById('txtbox');
+        inputBox.addEventListener('input', () => {
+            updateStats(inputBox.value, 'input-words', 'input-readability');
+        });
+        // Initial update
+        updateStats(inputBox.value, 'input-words', 'input-readability');
+
+
         document.querySelector('.summary-form').addEventListener('submit', async function (e) {
             e.preventDefault();
 
             const loader = document.getElementById('loader');
             const resultArea = document.getElementById('result');
+            const outputStats = document.getElementById('output-stats');
             const btn = this.querySelector('button');
             const formData = new FormData(this);
 
@@ -106,6 +191,11 @@
                 container.querySelector('.summary-content').textContent = '';   // Clear previous text
                 container.classList.remove('fadeIn');
             }
+            // Hide output stats initially
+            if (document.getElementById('output-stats-container')) {
+                document.getElementById('output-stats-container').style.display = 'none';
+            }
+
 
             // UI State: Loading
             btn.disabled = true;
@@ -128,6 +218,7 @@
                 const decoder = new TextDecoder();
 
                 let firstChunk = true;
+                let fullSummary = "";
 
                 while (true) {
                     const { done, value } = await reader.read();
@@ -143,20 +234,48 @@
                             container = document.createElement('div');
                             container.id = 'result';
                             container.className = 'result-area fadeIn';
-                            container.innerHTML = '<h2>Summary Result</h2><div class="summary-content"></div>';
+                            container.innerHTML = `
+                                <h2>Summary Result</h2>
+                                <div class="summary-content"></div>
+                                <div class="stats-bar" id="output-stats-container">
+                                    <div class="stat-item">
+                                        <span>Words:</span>
+                                        <span class="stat-value" id="output-words">0</span>
+                                    </div>
+                                    <div class="stat-item">
+                                        <span>Readability:</span>
+                                        <span class="stat-value" id="output-readability">N/A</span>
+                                    </div>
+                                </div>`;
                             document.querySelector('.container').appendChild(container);
                         } else {
                             container.style.display = 'block';
                             container.classList.add('fadeIn');
+                            // Ensure stats container exists in reused div
+                            if (!document.getElementById('output-stats-container')) {
+                                container.insertAdjacentHTML('beforeend', `
+                                <div class="stats-bar" id="output-stats-container">
+                                    <div class="stat-item">
+                                        <span>Words:</span>
+                                        <span class="stat-value" id="output-words">0</span>
+                                    </div>
+                                    <div class="stat-item">
+                                        <span>Readability:</span>
+                                        <span class="stat-value" id="output-readability">N/A</span>
+                                    </div>
+                                </div>`);
+                            }
+                            document.getElementById('output-stats-container').style.display = 'flex';
                         }
                         firstChunk = false;
                     }
 
                     const chunk = decoder.decode(value);
+                    fullSummary += chunk;
                     container.querySelector('.summary-content').textContent += chunk;
 
-                    // Auto-scroll to bottom if needed (optional)
-                    // container.scrollTop = container.scrollHeight;
+                    // Live update output stats
+                    updateStats(fullSummary, 'output-words', 'output-readability');
                 }
 
             } catch (err) {
